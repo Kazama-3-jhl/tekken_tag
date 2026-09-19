@@ -38,11 +38,13 @@ jobs:
 
       - name: Verify core output
         run: |
-          test -f mame2010/mame2010_libretro_emscripten.bc
-          echo "MAME 2010 bitcode build completed."
+          echo "Built files:"
+          find mame2010 -maxdepth 3 -type f \( -name "*.bc" -o -name "*.dll" -o -name "*.js" -o -name "*.wasm" \) -print
+          test -f mame2010/mame2010_libretro.dll
+          echo "MAME 2010 Emscripten build completed."
 
       - name: Upload core build
         uses: actions/upload-artifact@v4
         with:
           name: mame2010-emscripten-bitcode
-          path: mame2010/mame2010_libretro_emscripten.bc
+          path: mame2010/mame2010_libretro.dll
