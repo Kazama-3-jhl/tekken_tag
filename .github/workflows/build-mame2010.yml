@@ -29,6 +29,8 @@ jobs:
           sed -i 's/std::tr1::/std::/g' src/emu/state.h
           sed -i 's/#define DEF_NAMESPACE std::tr1/#define DEF_NAMESPACE std/' src/emu/state.h
           grep -n 'type_traits' src/emu/state.h
+          sed -i '/int osd_num_processors(void);/a static inline void osd_yield_processor(void) {}' src/osd/retro/retroos.h
+          grep -n 'osd_yield_processor' src/osd/retro/retroos.h
 
       - name: Build Emscripten static core
         working-directory: mame2010
