@@ -22,8 +22,16 @@ jobs:
       - name: Clone MAME 2010
         run: git clone --depth 1 https://github.com/libretro/mame2010-libretro.git mame2010
 
+      - name: Add legacy TR1 compatibility header
+        run: |
+          mkdir -p compat/tr1
+          printf '%s\n' '#pragma once' '#include <type_traits>' 'namespace std { namespace tr1 = ::std; }' > compat/tr1/type_traits
+
       - name: Build Emscripten static core
         working-directory: mame2010
+        env:
+          CXXFLAGS: -I${{ github.workspace }}/compat
+          CPPFLAGS: -I${{ github.workspace }}/compat
         run: emmake make platform=emscripten VRENDER=soft PTR64=1 -j2
 
       - name: Verify core output
