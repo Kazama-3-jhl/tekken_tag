@@ -39,7 +39,14 @@ jobs:
       - name: Link browser-ready WebAssembly core
         working-directory: mame2010
         run: |
-          em++ mame2010_libretro.dll -o mame2010_libretro.js \
+          cat > emscripten_pthread_stubs.c <<'EOF'
+          #include <pthread.h>
+          #include <errno.h>
+          int pthread_setschedparam(pthread_t thread, int policy, const struct sched_param *param) { return ENOSYS; }
+          int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize, const cpu_set_t *cpuset) { return ENOSYS; }
+          EOF
+          emcc -c emscripten_pthread_stubs.c -o emscripten_pthread_stubs.o
+          em++ mame2010_libretro.dll emscripten_pthread_stubs.o -o mame2010_libretro.js \
             -s MODULARIZE=1 \
             -s EXPORT_ES6=1 \
             -s ALLOW_MEMORY_GROWTH=1 \
