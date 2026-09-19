@@ -1,0 +1,32 @@
+name: Build MAME 2010 WebAssembly
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 4.0.15
+          actions-cache-folder: emsdk-cache
+
+      - name: Clone MAME 2010
+        run: git clone --depth 1 https://github.com/libretro/mame2010-libretro.git mame2010
+
+      - name: Build libretro core
+        working-directory: mame2010
+        run: emmake make -f Makefile.libretro platform=emscripten -j2
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: mame2010-emscripten
+          path: |
+            mame2010/mame2010_libretro_emscripten.bc
