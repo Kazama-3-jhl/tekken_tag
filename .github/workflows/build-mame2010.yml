@@ -28,45 +28,40 @@ jobs:
           sed -i 's@#include <tr1/type_traits>@#include <type_traits>@' src/emu/state.h
           sed -i 's/std::tr1::/std::/g' src/emu/state.h
           sed -i 's/#define DEF_NAMESPACE std::tr1/#define DEF_NAMESPACE std/' src/emu/state.h
-          grep -n 'type_traits' src/emu/state.h
           sed -i '/int osd_num_processors(void);/a static inline void osd_yield_processor(void) {}' src/osd/retro/retroos.h
+          grep -n 'type_traits' src/emu/state.h
           grep -n 'osd_yield_processor' src/osd/retro/retroos.h
 
-      - name: Build Emscripten static core
-        working-directory: mame2010
-        run: emmake make platform=emscripten VRENDER=soft PTR64=0 X86_SH2DRC=0 FORCE_DRC_C_BACKEND=1 -j2
-
-      - name: Link browser-ready WebAssembly core
+      - name: Build MAME 2010 libretro object
         working-directory: mame2010
         run: |
-          cat > emscripten_pthread_stubs.c <<'EOF'
-          #include <pthread.h>
-          #include <errno.h>
-          int pthread_setschedparam(pthread_t thread, int policy, const struct sched_param *param) { return ENOSYS; }
-          int pthread_setaffinity_np(pthread_t thread, size_t cpusetsize, const void *cpuset) { return ENOSYS; }
-          EOF
-          emcc -c emscripten_pthread_stubs.c -o emscripten_pthread_stubs.o
-          em++ mame2010_libretro.dll emscripten_pthread_stubs.o -o mame2010_libretro.js \
-            -s MODULARIZE=1 \
-            -s EXPORT_ES6=1 \
-            -s ALLOW_MEMORY_GROWTH=1 \
-            -s ENVIRONMENT=web,worker \
-            -s FILESYSTEM=1 \
-            -s EXPORTED_FUNCTIONS='["_malloc","_free"]' \
-            -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]'
+          emmake make platform=emscripten VRENDER=soft PTR64=0 X86_SH2DRC=0 FORCE_DRC_C_BACKEND=1 -j2
+          test -f mame2010_libretro.dll
 
-      - name: Verify browser core output
+      - name: Convert libretro object to Emscripten bitcode
+        working-directory: mame2010
         run: |
-          echo "Built files:"
-          find mame2010 -maxdepth 3 -type f \( -name "*.bc" -o -name "*.dll" -o -name "*.js" -o -name "*.wasm" \) -print
-          test -f mame2010/mame2010_libretro.js
-          test -f mame2010/mame2010_libretro.wasm
-          echo "MAME 2010 browser WebAssembly core completed."
+          emcc -r mame2010_libretro.dll -o mame2010_libretro_emscripten.bc
+          test -f mame2010_libretro_emscripten.bc
+          file mame2010_libretro_emscripten.bc
 
-      - name: Upload core build
+      - name: Clone EmulatorJS RetroArch build system
+        run: git clone --depth 1 --branch next https://github.com/EmulatorJS/RetroArch.git retroarch
+
+      - name: Build EmulatorJS-compatible MAME 2010 core
+        working-directory: retroarch/emulatorjs
+        run: |
+          cp ../../mame2010/mame2010_libretro_emscripten.bc ../dist-scripts/
+          emmake ./build-emulatorjs.sh --legacy
+
+      - name: Verify EmulatorJS core package
+        run: |
+          find retroarch/EmulatorJS/data/cores -maxdepth 1 -type f -name 'mame2010*' -print
+          test -f retroarch/EmulatorJS/data/cores/mame2010-wasm.data
+          echo "EmulatorJS-compatible MAME 2010 core completed."
+
+      - name: Upload EmulatorJS core
         uses: actions/upload-artifact@v4
         with:
-          name: mame2010-browser-core
-          path: |
-            mame2010/mame2010_libretro.js
-            mame2010/mame2010_libretro.wasm
+          name: mame2010-emulatorjs-core
+          path: retroarch/EmulatorJS/data/cores/mame2010-wasm.data
