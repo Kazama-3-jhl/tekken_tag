@@ -32,7 +32,7 @@ jobs:
 
       - name: Build Emscripten static core
         working-directory: mame2010
-        run: emmake make platform=emscripten VRENDER=soft PTR64=1 -j2
+        run: emmake make platform=emscripten VRENDER=soft PTR64=0 X86_SH2DRC=0 FORCE_DRC_C_BACKEND=1 -j2
 
       - name: Verify core output
         run: |
