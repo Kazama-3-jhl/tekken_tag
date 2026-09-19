@@ -36,15 +36,30 @@ jobs:
         working-directory: mame2010
         run: emmake make platform=emscripten VRENDER=soft PTR64=0 X86_SH2DRC=0 FORCE_DRC_C_BACKEND=1 -j2
 
-      - name: Verify core output
+      - name: Link browser-ready WebAssembly core
+        working-directory: mame2010
+        run: |
+          em++ mame2010_libretro.dll -o mame2010_libretro.js \
+            -s MODULARIZE=1 \
+            -s EXPORT_ES6=1 \
+            -s ALLOW_MEMORY_GROWTH=1 \
+            -s ENVIRONMENT=web,worker \
+            -s FILESYSTEM=1 \
+            -s EXPORTED_FUNCTIONS='["_malloc","_free"]' \
+            -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]'
+
+      - name: Verify browser core output
         run: |
           echo "Built files:"
           find mame2010 -maxdepth 3 -type f \( -name "*.bc" -o -name "*.dll" -o -name "*.js" -o -name "*.wasm" \) -print
-          test -f mame2010/mame2010_libretro.dll
-          echo "MAME 2010 Emscripten build completed."
+          test -f mame2010/mame2010_libretro.js
+          test -f mame2010/mame2010_libretro.wasm
+          echo "MAME 2010 browser WebAssembly core completed."
 
       - name: Upload core build
         uses: actions/upload-artifact@v4
         with:
-          name: mame2010-emscripten-bitcode
-          path: mame2010/mame2010_libretro.dll
+          name: mame2010-browser-core
+          path: |
+            mame2010/mame2010_libretro.js
+            mame2010/mame2010_libretro.wasm
