@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,13 +22,17 @@ jobs:
       - name: Clone MAME 2010
         run: git clone --depth 1 https://github.com/libretro/mame2010-libretro.git mame2010
 
-      - name: Build libretro core
+      - name: Build Emscripten static core
         working-directory: mame2010
-        run: emmake make -f Makefile.libretro platform=emscripten -j2
+        run: emmake make platform=emscripten VRENDER=soft PTR64=1 -j2
 
-      - name: Upload build
+      - name: Verify core output
+        run: |
+          test -f mame2010/mame2010_libretro_emscripten.bc
+          echo "MAME 2010 bitcode build completed."
+
+      - name: Upload core build
         uses: actions/upload-artifact@v4
         with:
-          name: mame2010-emscripten
-          path: |
-            mame2010/mame2010_libretro_emscripten.bc
+          name: mame2010-emscripten-bitcode
+          path: mame2010/mame2010_libretro_emscripten.bc
