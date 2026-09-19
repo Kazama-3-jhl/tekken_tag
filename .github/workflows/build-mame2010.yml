@@ -27,6 +27,7 @@ jobs:
         run: |
           sed -i 's@#include <tr1/type_traits>@#include <type_traits>@' src/emu/state.h
           sed -i 's/std::tr1::/std::/g' src/emu/state.h
+          grep -n 'type_traits' src/emu/state.h
 
       - name: Build Emscripten static core
         working-directory: mame2010
