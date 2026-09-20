@@ -91,14 +91,41 @@ jobs:
 
       - name: Assemble standalone package
         run: |
-          set -eux
-          rm -rf package
+          set -euxo pipefail
+          rm -rf package tekken-tag-standalone.zip
           mkdir -p package/emulatorjs/data
+
           cp index.html package/index.html
-          cp -a EmulatorJS/data/. package/emulatorjs/data/
-          test -f package/emulatorjs/data/cores/mame2010-legacy-wasm.data
-          test -f package/emulatorjs/data/loader.js
-          find package/emulatorjs/data -maxdepth 2 -type f | sort | head -200
+
+          echo "=== Searching EmulatorJS output ==="
+          find . -type f \( -name 'loader.js' -o -name 'emulator.js' -o -name 'emulatorjs.css' -o -name 'mame2010-legacy-wasm.data' \) -print
+
+          CORE="$(find . -type f -name 'mame2010-legacy-wasm.data' -print -quit)"
+          LOADER="$(find . -type f -name 'loader.js' -path '*/data/loader.js' -print -quit)"
+          EMULATOR="$(find . -type f -name 'emulator.js' -print -quit)"
+          CSS="$(find . -type f -name 'emulatorjs.css' -print -quit)"
+
+          test -n "$CORE"
+          test -n "$LOADER"
+          test -n "$EMULATOR"
+          test -n "$CSS"
+
+          OUT="package/emulatorjs/data"
+          cp "$LOADER" "$OUT/loader.js"
+          cp "$EMULATOR" "$OUT/emulator.js"
+          cp "$CSS" "$OUT/emulatorjs.css"
+          mkdir -p "$OUT/cores"
+          cp "$CORE" "$OUT/cores/mame2010-legacy-wasm.data"
+
+          ICONS="$(find . -type f -path '*/svg/icons.svg' -print -quit || true)"
+          if [ -n "$ICONS" ]; then
+            mkdir -p "$OUT/svg"
+            cp "$ICONS" "$OUT/svg/icons.svg"
+          fi
+
+          echo "=== Final package files ==="
+          find package -type f -printf '%p %s bytes\n' | sort
+
           cd package
           zip -r ../tekken-tag-standalone.zip index.html emulatorjs
           cd ..
