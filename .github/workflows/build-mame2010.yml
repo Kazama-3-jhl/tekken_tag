@@ -55,8 +55,10 @@ jobs:
         working-directory: retroarch/emulatorjs
         run: |
           cp ../../mame2010/mame2010_libretro_emscripten.bc .
-          sed -i '/^OBJ :=/a OBJ := $(filter-out %libretro-common/file/file_path_io.o %libretro-common/file/file_path.o %libretro-common/compat/compat_strcasestr.o %libretro-common/compat/compat_strl.o,$(OBJ))' ../Makefile.emulatorjs
-          grep -n '^OBJ :=' ../Makefile.emulatorjs | tail -3
+          # The MAME bitcode already contains these libretro-common objects.
+          # Patch RARCH_OBJ directly so the generated prerequisite list cannot re-add them.
+          sed -i 's@^RARCH_OBJ := .*@RARCH_OBJ := $(filter-out %libretro-common/file/file_path_io.o %libretro-common/file/file_path.o %libretro-common/compat/compat_strcasestr.o %libretro-common/compat/compat_strl.o,$(addprefix $(OBJDIR)/,$(OBJ)))@' ../Makefile.emulatorjs
+          grep -n '^RARCH_OBJ :=' ../Makefile.emulatorjs
           emmake ./build-emulatorjs.sh --legacy
 
       - name: Verify EmulatorJS core package
