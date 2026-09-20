@@ -1,4 +1,4 @@
-name: Package working EmulatorJS runtime
+name: Build self-hosted Tekken Tag runtime
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
           npm install playwright
           npx playwright install --with-deps chromium
 
-      - name: Capture runtime from the LIVE working page
+      - name: Capture only EmulatorJS runtime files
         env:
           LIVE_PAGE: https://pooryafard.com/games/tekken-tag/
           ROM_URL: https://pooryafard.com/games/tekken-tag/tektagt.zip
@@ -35,54 +35,68 @@ jobs:
           import fs from "fs/promises";
           import path from "path";
 
-          const baseDir = path.resolve("emulatorjs");
-          await fs.rm(baseDir, { recursive: true, force: true });
-          await fs.mkdir(baseDir, { recursive: true });
+          const root = path.resolve("selfhost");
+          await fs.rm(root, { recursive: true, force: true });
+          await fs.mkdir(root, { recursive: true });
 
           const browser = await chromium.launch({ headless: true });
           const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-
-          const responses = new Map();
+          const saves = [];
           const requestUrls = new Set();
           const errors = [];
 
-          page.on("request", request => {
-            requestUrls.add(request.url());
-          });
+          const shouldCapture = url => {
+            const u = new URL(url);
+            if (u.hostname !== "www.emulatorjs.com") return false;
+            if (u.pathname.startsWith("/cdn-cgi/")) return false;
+            if (u.pathname.startsWith("/embed/")) return false;
+            if (u.pathname.startsWith("/ad.html")) return false;
+            if (u.pathname.startsWith("/api/mame0.243")) return true;
+            if (u.pathname.startsWith("/worker/")) return true;
+            return /\/(loader|emulator|emulatorjs)\.(js|css)$/i.test(u.pathname);
+          };
 
-          page.on("pageerror", error => {
-            errors.push("PAGEERROR " + error.message);
-          });
+          const targetFor = url => {
+            const u = new URL(url);
+            const p = u.pathname.replace(/^\//, "");
+            if (p.startsWith("api/")) return path.join(root, p);
+            if (p.startsWith("worker/")) return path.join(root, p);
+            return path.join(root, "runtime", p || "index");
+          };
 
-          page.on("console", message => {
-            if (message.type() === "error") {
-              errors.push("CONSOLE " + message.text());
-            }
-          });
-
-          page.on("response", async response => {
+          const saveResponse = async response => {
             try {
-              const u = new URL(response.url());
-              const ct = (response.headers()["content-type"] || "").toLowerCase();
-              const status = response.status();
+              const url = response.url();
+              const u = new URL(url);
+              const body = await response.body();
+              const target = targetFor(url);
+              await fs.mkdir(path.dirname(target), { recursive: true });
+              await fs.writeFile(target, body);
+              return {
+                url,
+                contentType: response.headers()["content-type"] || "",
+                bytes: body.length,
+                file: path.relative(root, target)
+              };
+            } catch (e) {
+              errors.push("SAVEERROR " + response.url() + " :: " + e.message);
+              return null;
+            }
+          };
 
-              if (u.href === process.env.ROM_URL) return;
-              if (u.hostname === "pooryafard.com") return;
+          page.on("request", request => requestUrls.add(request.url()));
 
-              const useful =
-                ct.includes("javascript") ||
-                ct.includes("ecmascript") ||
-                ct.includes("css") ||
-                ct.includes("wasm") ||
-                ct.includes("octet-stream") ||
-                ct.includes("json") ||
-                ct.includes("application/wasm") ||
-                /\.(js|css|wasm|data|json|bin|worker)$/i.test(u.pathname);
-
-              if (!useful || status < 200 || status >= 300) return;
-
-              responses.set(u.href, response);
+          page.on("response", response => {
+            try {
+              if (!shouldCapture(response.url())) return;
+              if (response.status() < 200 || response.status() >= 300) return;
+              saves.push(saveResponse(response));
             } catch {}
+          });
+
+          page.on("pageerror", e => errors.push("PAGEERROR " + e.message));
+          page.on("console", m => {
+            if (m.type() === "error") errors.push("CONSOLE " + m.text());
           });
 
           await page.goto(process.env.LIVE_PAGE, {
@@ -100,66 +114,82 @@ jobs:
           } catch {}
 
           await page.waitForTimeout(30000);
+          const captured = (await Promise.all(saves)).filter(Boolean);
 
-          const manifest = [];
-          for (const [url, response] of responses) {
+          // Directly fetch the runtime endpoints too, so navigation timing cannot
+          // prevent the core/extractor resources from being packaged.
+          const directUrls = [
+            "https://www.emulatorjs.com/api/mame0.243",
+            "https://www.emulatorjs.com/worker/crc32_worker.js",
+            "https://www.emulatorjs.com/worker/extractor_worker.js",
+            "https://www.emulatorjs.com/worker/extractor.js",
+            "https://www.emulatorjs.com/worker/extractor.wasm"
+          ];
+
+          for (const url of directUrls) {
             try {
+              if (captured.some(x => x.url === url)) continue;
+              const response = await page.request.get(url);
+              if (!response.ok()) {
+                errors.push("DIRECT " + url + " :: HTTP " + response.status());
+                continue;
+              }
               const body = await response.body();
-              const u = new URL(url);
-              const host = u.hostname.replace(/[^a-z0-9.-]/gi, "_");
-              const cleanPath = decodeURIComponent(u.pathname)
-                .replace(/^\/+/, "")
-                .replace(/\.\.+/g, "_");
-
-              const relative = path.join(host, cleanPath || "index");
-              const target = path.join(baseDir, relative);
-
+              const target = targetFor(url);
               await fs.mkdir(path.dirname(target), { recursive: true });
               await fs.writeFile(target, body);
-
-              manifest.push({
+              captured.push({
                 url,
                 contentType: response.headers()["content-type"] || "",
                 bytes: body.length,
-                file: relative
+                file: path.relative(root, target)
               });
-            } catch (error) {
-              errors.push("SAVEERROR " + url + " :: " + error.message);
+            } catch (e) {
+              errors.push("DIRECT " + url + " :: " + e.message);
             }
           }
 
+          const unique = new Map(captured.map(x => [x.file, x]));
+          const manifest = [...unique.values()].sort((a,b) => a.file.localeCompare(b.file));
+
           await fs.writeFile(
-            path.join(baseDir, "NETWORK-MANIFEST.json"),
+            path.join(root, "NETWORK-MANIFEST.json"),
             JSON.stringify({ requestUrls: [...requestUrls], captured: manifest, errors }, null, 2)
           );
 
           await browser.close();
 
-          console.log("Captured:");
-          console.log(manifest.map(x => x.file + " :: " + x.bytes + " bytes :: " + x.url).join("\n"));
-          console.log("Errors:");
-          console.log(errors.join("\n"));
-          console.log("Total captured:", manifest.length);
+          console.log(manifest.map(x => x.file + " :: " + x.bytes + " bytes").join("\n"));
+          console.log("Errors:\n" + errors.join("\n"));
+          console.log("Total:", manifest.length);
 
-          if (!manifest.some(x => /loader\.js$/i.test(x.url))) {
-            throw new Error("loader.js was not captured from the live page");
+          if (!manifest.some(x => /(^|\/)loader\.js$/i.test(x.file))) {
+            throw new Error("loader.js missing");
           }
-          if (manifest.length < 3) {
-            throw new Error("Too few runtime files were captured; refusing to publish an incomplete package.");
+          if (!manifest.some(x => /(^|\/)emulator\.js$/i.test(x.file))) {
+            throw new Error("emulator.js missing");
+          }
+          if (!manifest.some(x => x.url.includes("/api/mame0.243"))) {
+            throw new Error("mame0.243 core endpoint was not captured");
+          }
+          if (!manifest.some(x => x.url.endsWith("/worker/extractor.wasm"))) {
+            throw new Error("extractor.wasm was not captured");
           }
           EOF
 
           node capture.mjs
 
-      - name: Add local test page
+      - name: Add deployment files
         run: |
-          cat > emulatorjs/index.html <<'EOF'
-          <!doctype html>
+          mkdir -p selfhost/games/tekken-tag
+
+          cat > selfhost/games/tekken-tag/index.html <<'EOF'
+          <!DOCTYPE html>
           <html lang="fa" dir="rtl">
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width,initial-scale=1.0">
-            <title>Tekken Tag Tournament - Self Hosted</title>
+            <title>Tekken Tag Tournament - Arcade</title>
             <style>
               html,body{margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden}
               #game{width:100%;height:100%}
@@ -168,53 +198,77 @@ jobs:
           <body>
             <div id="game"></div>
             <script>
-              EJS_player="#game";
-              EJS_gameUrl="../tektagt.zip";
-              EJS_core="mame0.243";
-              EJS_gameName="Tekken Tag Tournament";
-              EJS_startOnLoaded=true;
+              EJS_player = "#game";
+              EJS_gameParentUrl = "";
+              EJS_gameUrl = "./tektagt.zip";
+              EJS_core = "mame0.243";
+              EJS_gameName = "Tekken Tag Tournament";
+              EJS_startOnLoaded = true;
+              EJS_controlScheme = "mame";
             </script>
-            <script src="./www.emulatorjs.com/loader.js"></script>
+            <script src="./runtime/loader.js"></script>
           </body>
           </html>
           EOF
 
-          cat > emulatorjs/README.txt <<'EOF'
-          Runtime package captured from the currently working Tekken Tag page:
-            https://pooryafard.com/games/tekken-tag/
+          cat > selfhost/README.txt <<'EOF'
+          TEKKEN TAG TOURNAMENT — SELF-HOSTED RUNTIME
 
+          This package is designed to be extracted directly into public_html.
           It intentionally excludes tektagt.zip.
 
-          The package contains the runtime requests observed while the page
-          launched successfully with EJS_core="mame0.243".
+          Required final layout:
+            public_html/
+              api/mame0.243
+              worker/...
+              games/tekken-tag/index.html
+              games/tekken-tag/runtime/loader.js
+              games/tekken-tag/runtime/emulator.js
+              games/tekken-tag/runtime/emulatorjs.css
+              games/tekken-tag/runtime/svg/icons.svg   (when present)
 
-          Keep the directory structure intact when extracting.
+          Put tektagt.zip beside index.html:
+            public_html/games/tekken-tag/tektagt.zip
+
+          The runtime files are captured locally from the working 0.5.56
+          configuration and the ads/Cloudflare files from the capture are removed.
+          The goal is zero runtime requests to emulatorjs.com.
           EOF
 
-      - name: Create ZIP
+      - name: Test package structure
         run: |
-          rm -f tekken-tag-emulator-runtime.zip
-          zip -r -9 tekken-tag-emulator-runtime.zip emulatorjs
-          echo "ZIP SIZE:"
-          ls -lh tekken-tag-emulator-runtime.zip
-          echo "ZIP CONTENTS:"
-          unzip -l tekken-tag-emulator-runtime.zip | sed -n '1,240p'
+          test -f selfhost/games/tekken-tag/index.html
+          test -f selfhost/runtime/loader.js
+          test -f selfhost/runtime/emulator.js
+          test -f selfhost/api/mame0.243
+          test -f selfhost/worker/extractor.wasm
+          echo "SELF-HOST PACKAGE CHECK PASSED"
+          find selfhost -maxdepth 4 -type f -printf '%p %s bytes\n' | sort
+
+      - name: Create self-host ZIP
+        run: |
+          rm -f tekken-tag-selfhost-runtime.zip
+          (cd selfhost && zip -r -9 ../tekken-tag-selfhost-runtime.zip .)
+          ls -lh tekken-tag-selfhost-runtime.zip
+          unzip -l tekken-tag-selfhost-runtime.zip | sed -n '1,260p'
 
       - name: Publish public GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: tekken-tag-runtime-2026-09-20
-          name: Tekken Tag EmulatorJS Runtime
+          tag_name: tekken-tag-selfhost-2026-09-20
+          name: Tekken Tag Tournament — Self-Hosted Runtime
           body: |
-            Self-hosting runtime captured from the working Tekken Tag Tournament Arcade page.
+            Self-host package for the working Tekken Tag Tournament Arcade configuration.
 
-            ROM (tektagt.zip) is intentionally excluded.
-          files: tekken-tag-emulator-runtime.zip
+            tektagt.zip is intentionally excluded.
+            Extract this ZIP into public_html and place tektagt.zip in games/tekken-tag/.
+            Runtime/API/worker files are packaged locally; emulatorjs.com ads and Cloudflare files are excluded.
+          files: tekken-tag-selfhost-runtime.zip
           make_latest: false
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tekken-tag-emulator-runtime
-          path: tekken-tag-emulator-runtime.zip
+          name: tekken-tag-selfhost-runtime
+          path: tekken-tag-selfhost-runtime.zip
           retention-days: 90
