@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -52,11 +55,8 @@ jobs:
         working-directory: retroarch/emulatorjs
         run: |
           cp ../../mame2010/mame2010_libretro_emscripten.bc .
-          # MAME 2010 already contains these libretro-common objects.
-          # Exclude RetroArch's duplicate copies from the final link.
-          cat >> ../Makefile.emulatorjs <<'EOF'
-OBJ := $(filter-out %libretro-common/file/file_path_io.o %libretro-common/file/file_path.o %libretro-common/compat/compat_strcasestr.o %libretro-common/compat/compat_strl.o,$(OBJ))
-EOF
+          sed -i '/^OBJ :=/a OBJ := $(filter-out %libretro-common/file/file_path_io.o %libretro-common/file/file_path.o %libretro-common/compat/compat_strcasestr.o %libretro-common/compat/compat_strl.o,$(OBJ))' ../Makefile.emulatorjs
+          grep -n '^OBJ :=' ../Makefile.emulatorjs | tail -3
           emmake ./build-emulatorjs.sh --legacy
 
       - name: Verify EmulatorJS core package
