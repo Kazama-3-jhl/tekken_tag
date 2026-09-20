@@ -52,9 +52,11 @@ jobs:
         working-directory: retroarch/emulatorjs
         run: |
           cp ../../mame2010/mame2010_libretro_emscripten.bc .
-          # MAME 2010 already contains libretro-common objects; RetroArch also links
-          # its own copies during EmulatorJS packaging. wasm-ld must keep one copy.
-          printf '\nLDFLAGS += --allow-multiple-definition\n' >> ../Makefile.emulatorjs
+          # MAME 2010 already contains these libretro-common objects.
+          # Exclude RetroArch's duplicate copies from the final link.
+          cat >> ../Makefile.emulatorjs <<'EOF'
+OBJ := $(filter-out %libretro-common/file/file_path_io.o %libretro-common/file/file_path.o %libretro-common/compat/compat_strcasestr.o %libretro-common/compat/compat_strl.o,$(OBJ))
+EOF
           emmake ./build-emulatorjs.sh --legacy
 
       - name: Verify EmulatorJS core package
