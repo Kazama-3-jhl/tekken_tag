@@ -1,0 +1,156 @@
+name: Package working EmulatorJS runtime
+
+on:
+  push:
+    branches: ["mame2010-build"]
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install --with-deps chromium
+
+      - name: Capture exact runtime files
+        env:
+          ROM_URL: https://pooryafard.com/games/tekken-tag/tektagt.zip
+        run: |
+          cat > capture.mjs <<'EOF'
+          import { chromium } from "playwright";
+          import fs from "fs/promises";
+          import path from "path";
+
+          const baseDir = path.resolve("emulatorjs");
+          await fs.rm(baseDir, { recursive: true, force: true });
+          await fs.mkdir(baseDir, { recursive: true });
+
+          const html = `<!doctype html>
+          <html><body>
+          <div id="game" style="width:100vw;height:100vh"></div>
+          <script>
+            EJS_player="#game";
+            EJS_gameUrl="https://pooryafard.com/games/tekken-tag/tektagt.zip";
+            EJS_core="mame0.243";
+            EJS_gameName="Tekken Tag Tournament";
+            EJS_startOnLoaded=true;
+          </script>
+          <script src="https://www.emulatorjs.com/loader.js"></script>
+          </body></html>`;
+
+          await fs.writeFile("capture.html", html);
+
+          const browser = await chromium.launch({ headless: true });
+          const page = await browser.newPage();
+
+          const wanted = new Map();
+          page.on("response", async response => {
+            try {
+              const u = new URL(response.url());
+              const ct = (response.headers()["content-type"] || "").toLowerCase();
+
+              const isEmulatorHost =
+                u.hostname === "emulatorjs.com" ||
+                u.hostname === "www.emulatorjs.com" ||
+                u.hostname.endsWith(".emulatorjs.com");
+
+              const isUsefulType =
+                ct.includes("javascript") ||
+                ct.includes("ecmascript") ||
+                ct.includes("css") ||
+                ct.includes("wasm") ||
+                ct.includes("octet-stream") ||
+                ct.includes("json") ||
+                ct.includes("font");
+
+              if (!isEmulatorHost || !isUsefulType) return;
+
+              const pathname = decodeURIComponent(u.pathname);
+              if (!pathname || pathname === "/") return;
+
+              const clean = pathname.replace(/^\/+/, "");
+              wanted.set(clean, response);
+            } catch {}
+          });
+
+          await page.goto("file://" + process.cwd() + "/capture.html", {
+            waitUntil: "domcontentloaded",
+            timeout: 60000
+          }).catch(() => {});
+
+          await page.waitForTimeout(30000);
+
+          try {
+            await page.mouse.click(500, 400);
+            await page.keyboard.press("ArrowLeft");
+          } catch {}
+
+          await page.waitForTimeout(15000);
+
+          for (const [rel, response] of wanted) {
+            try {
+              const body = await response.body();
+              const target = path.join(baseDir, rel);
+              await fs.mkdir(path.dirname(target), { recursive: true });
+              await fs.writeFile(target, body);
+            } catch {}
+          }
+
+          await browser.close();
+
+          const files = [];
+          async function walk(dir) {
+            for (const name of await fs.readdir(dir)) {
+              const p = path.join(dir, name);
+              const st = await fs.stat(p);
+              if (st.isDirectory()) await walk(p);
+              else files.push(path.relative(baseDir, p));
+            }
+          }
+          await walk(baseDir);
+
+          if (!files.some(x => x.endsWith("loader.js"))) {
+            throw new Error("loader.js was not captured");
+          }
+          if (!files.some(x => /mame0\.243/i.test(x))) {
+            console.log("WARNING: No captured mame0.243-named file. Listing captured files:");
+          }
+
+          console.log("Captured files:");
+          console.log(files.join("\n"));
+          EOF
+
+          node capture.mjs
+
+      - name: Write self-hosting test page
+        run: |
+          cat > emulatorjs/README.txt <<'EOF'
+          This package contains the EmulatorJS runtime resources observed
+          while launching Tekken Tag Tournament Arcade with:
+            EJS_core = mame0.243
+
+          ROM is intentionally excluded. Keep tektagt.zip on your own host.
+          EOF
+
+      - name: Create ZIP
+        run: |
+          zip -r emulatorjs-mame0243-runtime.zip emulatorjs
+          ls -lh emulatorjs-mame0243-runtime.zip
+          unzip -l emulatorjs-mame0243-runtime.zip | sed -n '1,120p'
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulatorjs-mame0243-runtime
+          path: emulatorjs-mame0243-runtime.zip
+          retention-days: 90
