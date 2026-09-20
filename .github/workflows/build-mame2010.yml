@@ -89,6 +89,28 @@ jobs:
           test -f EmulatorJS/data/cores/mame2010-legacy-wasm.data
           echo "EmulatorJS-compatible MAME 2010 core completed."
 
+      - name: Assemble standalone package
+        run: |
+          set -eux
+          rm -rf package
+          mkdir -p package/emulatorjs/data
+          cp index.html package/index.html
+          cp -a EmulatorJS/data/. package/emulatorjs/data/
+          test -f package/emulatorjs/data/cores/mame2010-legacy-wasm.data
+          test -f package/emulatorjs/data/loader.js
+          find package/emulatorjs/data -maxdepth 2 -type f | sort | head -200
+          cd package
+          zip -r ../tekken-tag-standalone.zip index.html emulatorjs
+          cd ..
+          test -s tekken-tag-standalone.zip
+
+      - name: Upload standalone package
+        uses: actions/upload-artifact@v4
+        with:
+          name: tekken-tag-standalone
+          path: tekken-tag-standalone.zip
+          if-no-files-found: error
+
       - name: Upload EmulatorJS core
         uses: actions/upload-artifact@v4
         with:
