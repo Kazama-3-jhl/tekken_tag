@@ -51,7 +51,7 @@ jobs:
       - name: Build EmulatorJS-compatible MAME 2010 core
         working-directory: retroarch/emulatorjs
         run: |
-          cp ../../mame2010/mame2010_libretro_emscripten.bc ../dist-scripts/
+          cp ../../mame2010/mame2010_libretro_emscripten.bc .
           emmake ./build-emulatorjs.sh --legacy
 
       - name: Verify EmulatorJS core package
