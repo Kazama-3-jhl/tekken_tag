@@ -94,7 +94,13 @@ jobs:
           set -euxo pipefail
           rm -rf emulatorjs-runtime
           git clone --depth 1 https://github.com/EmulatorJS/EmulatorJS.git emulatorjs-runtime
+          cd emulatorjs-runtime
+          npm ci
+          npm run minify
+          cd ..
           test -f emulatorjs-runtime/data/loader.js
+          test -f emulatorjs-runtime/data/emulator.min.js
+          test -f emulatorjs-runtime/data/emulator.min.css
 
       - name: Assemble standalone package
         run: |
