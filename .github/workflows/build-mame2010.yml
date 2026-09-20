@@ -78,19 +78,19 @@ jobs:
           PY
 
           grep -n 'RARCH_OBJ :=' ../Makefile.emulatorjs
-          grep -n '\$(TARGET):' ../Makefile.emulatorjs | tail -1
-          grep -n '\$(Q)\$(LD)' ../Makefile.emulatorjs | tail -1
+          grep -n '$(TARGET):' ../Makefile.emulatorjs | tail -1
+          grep -n '$(Q)$(LD)' ../Makefile.emulatorjs | tail -1
 
           emmake ./build-emulatorjs.sh --legacy
 
       - name: Verify EmulatorJS core package
         run: |
           find retroarch/EmulatorJS/data/cores -maxdepth 1 -type f -name 'mame2010*' -print
-          test -f retroarch/EmulatorJS/data/cores/mame2010-wasm.data
+          test -f retroarch/EmulatorJS/data/cores/mame2010-legacy-wasm.data
           echo "EmulatorJS-compatible MAME 2010 core completed."
 
       - name: Upload EmulatorJS core
         uses: actions/upload-artifact@v4
         with:
           name: mame2010-emulatorjs-core
-          path: retroarch/EmulatorJS/data/cores/mame2010-wasm.data
+          path: retroarch/EmulatorJS/data/cores/mame2010-legacy-wasm.data
