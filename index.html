@@ -11,26 +11,24 @@ html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}
 </head>
 <body>
 <div id="game"></div>
+
 <script>
 /*
- * Tekken Tag Tournament Arcade
- * Target: Namco System 12 / MAME 0.139-compatible set.
- * The standard EmulatorJS "mame" core is MAME 2003-era and is
- * intentionally not used as the final core for this game.
+ * Direct test matching the reference site's documented MAME 0.243 route.
+ * The ROM remains external to GitHub and is expected beside this file:
+ * ./tektagt.zip
  */
-window.EJS_player="#game";
-window.EJS_gameName="tektagt";
-window.EJS_gameUrl="./tektagt.zip";
-window.EJS_startOnLoaded=true;
-window.EJS_backgroundColor="#000000";
-window.EJS_backgroundImage="https://play.retrogames.onl/images/arcade/tekken-tag-tournament-arcade.png";
-
-/*
- * Final browser build will be supplied by the MAME 2010/WebAssembly
- * build in /core/. Keep this file separate from the ROM archive.
- */
-window.EJS_pathtodata="./emulatorjs/data/";
+EJS_player = "#game";
+EJS_gameName = "tektagt";
+EJS_gameUrl = "./tektagt.zip";
+EJS_gameParentUrl = "";
+EJS_core = "mame0.243";
+EJS_pathtodata = "https://cdn.emulatorjs.org/stable/data/";
+EJS_language = "en-US";
+EJS_disableAutoLang = true;
+EJS_startOnLoaded = true;
 </script>
-<script src="./emulatorjs/data/loader.js"></script>
+
+<script src="https://cdn.emulatorjs.org/stable/data/loader.js"></script>
 </body>
 </html>
