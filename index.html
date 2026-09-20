@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Tekken Tag Tournament - Arcade</title>
 <style>
-html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}
+html,body{margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden}
 #game{width:100%;height:100%}
 </style>
 </head>
@@ -13,22 +13,20 @@ html,body{margin:0;width:100%;height:100%;background:#000;overflow:hidden}
 <div id="game"></div>
 
 <script>
-/*
- * Direct test matching the reference site's documented MAME 0.243 route.
- * The ROM remains external to GitHub and is expected beside this file:
- * ./tektagt.zip
- */
 EJS_player = "#game";
-EJS_gameName = "tektagt";
-EJS_gameUrl = "./tektagt.zip";
-EJS_gameParentUrl = "";
 EJS_core = "mame0.243";
-EJS_pathtodata = "https://cdn.emulatorjs.org/stable/data/";
+EJS_gameName = "Tekken Tag Tournament";
+EJS_gameParentUrl = "";
+EJS_gameUrl = "https://pooryafard.com/games/tekken-tag/tektagt.zip";
+EJS_startOnLoaded = true;
 EJS_language = "en-US";
 EJS_disableAutoLang = true;
-EJS_startOnLoaded = true;
+EJS_forceLegacyCores = false;
+EJS_backgroundColor = "#000000";
+EJS_backgroundImage = "https://play.retrogames.onl/images/arcade/tekken-tag-tournament-arcade.png";
+EJS_pathtodata = "https://www.emulatorjs.com/data/";
 </script>
 
-<script src="https://cdn.emulatorjs.org/stable/data/loader.js"></script>
+<script src="https://www.emulatorjs.com/data/loader.js"></script>
 </body>
 </html>
