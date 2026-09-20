@@ -52,6 +52,9 @@ jobs:
         working-directory: retroarch/emulatorjs
         run: |
           cp ../../mame2010/mame2010_libretro_emscripten.bc .
+          # MAME 2010 already contains libretro-common objects; RetroArch also links
+          # its own copies during EmulatorJS packaging. wasm-ld must keep one copy.
+          sed -i '/^LDFLAGS :=/s@$@ --allow-multiple-definition@' ../Makefile.emulatorjs
           emmake ./build-emulatorjs.sh --legacy
 
       - name: Verify EmulatorJS core package
