@@ -53,29 +53,34 @@ jobs:
         working-directory: retroarch/emulatorjs
         run: |
           cp ../../mame2010/mame2010_libretro_emscripten.bc .
-          # MAME 2010 bitcode already contains these libretro-common objects.
-          # Filter the actual prerequisite/link object list, not just OBJ.
+
           python3 - <<'PY'
           p="../Makefile.emulatorjs"
           s=open(p).read()
           dup=" %libretro-common/file/file_path_io.o %libretro-common/file/file_path.o %libretro-common/compat/compat_strcasestr.o %libretro-common/compat/compat_strl.o"
+
           old='RARCH_OBJ := $(addprefix $(OBJDIR)/,$(OBJ))'
           new='RARCH_OBJ := $(filter-out'+dup+',$(addprefix $(OBJDIR)/,$(OBJ)))'
           assert old in s
           s=s.replace(old,new,1)
+
           old2='$(TARGET): $(RARCH_OBJ) $(libretro_new) mv_libretro'
           new2='$(TARGET): $(filter-out'+dup+',$(RARCH_OBJ)) $(libretro_new) mv_libretro'
           assert old2 in s
           s=s.replace(old2,new2,1)
+
           old3='$(Q)$(LD) -o $@ $(RARCH_OBJ) $(libretro_new) $(additional_libs) $(LIBS) $(LDFLAGS)'
-          new3='$(Q)$(LD) -o $@ $(filter-out'+dup+',$(RARCH_OBJ)) $(libretro_new) $(additional_libs) $(LIBS) $(LDFLAGS)'
+          new3='$(Q)$(LD) -o $@ $(filter-out'+dup+',$(RARCH_OBJ)) $(libretro_new) $(additional_libs) $(LIBS) $(LDFLAGS) -Wl,--allow-multiple-definition'
           assert old3 in s
           s=s.replace(old3,new3,1)
+
           open(p,"w").write(s)
           PY
+
           grep -n 'RARCH_OBJ :=' ../Makefile.emulatorjs
           grep -n '\$(TARGET):' ../Makefile.emulatorjs | tail -1
           grep -n '\$(Q)\$(LD)' ../Makefile.emulatorjs | tail -1
+
           emmake ./build-emulatorjs.sh --legacy
 
       - name: Verify EmulatorJS core package
