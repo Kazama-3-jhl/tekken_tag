@@ -32,8 +32,6 @@ jobs:
           sed -i 's/std::tr1::/std::/g' src/emu/state.h
           sed -i 's/#define DEF_NAMESPACE std::tr1/#define DEF_NAMESPACE std/' src/emu/state.h
           sed -i '/int osd_num_processors(void);/a static inline void osd_yield_processor(void) {}' src/osd/retro/retroos.h
-          grep -n 'type_traits' src/emu/state.h
-          grep -n 'osd_yield_processor' src/osd/retro/retroos.h
 
       - name: Build MAME 2010 libretro object
         working-directory: mame2010
@@ -55,10 +53,29 @@ jobs:
         working-directory: retroarch/emulatorjs
         run: |
           cp ../../mame2010/mame2010_libretro_emscripten.bc .
-          # The MAME bitcode already contains these libretro-common objects.
-          # Patch RARCH_OBJ directly so the generated prerequisite list cannot re-add them.
-          sed -i 's@^RARCH_OBJ := .*@RARCH_OBJ := $(filter-out %libretro-common/file/file_path_io.o %libretro-common/file/file_path.o %libretro-common/compat/compat_strcasestr.o %libretro-common/compat/compat_strl.o,$(addprefix $(OBJDIR)/,$(OBJ)))@' ../Makefile.emulatorjs
-          grep -n '^RARCH_OBJ :=' ../Makefile.emulatorjs
+          # MAME 2010 bitcode already contains these libretro-common objects.
+          # Filter the actual prerequisite/link object list, not just OBJ.
+          python3 - <<'PY'
+          p="../Makefile.emulatorjs"
+          s=open(p).read()
+          dup=" %libretro-common/file/file_path_io.o %libretro-common/file/file_path.o %libretro-common/compat/compat_strcasestr.o %libretro-common/compat/compat_strl.o"
+          old='RARCH_OBJ := $(addprefix $(OBJDIR)/,$(OBJ))'
+          new='RARCH_OBJ := $(filter-out'+dup+',$(addprefix $(OBJDIR)/,$(OBJ)))'
+          assert old in s
+          s=s.replace(old,new,1)
+          old2='$(TARGET): $(RARCH_OBJ) $(libretro_new) mv_libretro'
+          new2='$(TARGET): $(filter-out'+dup+',$(RARCH_OBJ)) $(libretro_new) mv_libretro'
+          assert old2 in s
+          s=s.replace(old2,new2,1)
+          old3='$(Q)$(LD) -o $@ $(RARCH_OBJ) $(libretro_new) $(additional_libs) $(LIBS) $(LDFLAGS)'
+          new3='$(Q)$(LD) -o $@ $(filter-out'+dup+',$(RARCH_OBJ)) $(libretro_new) $(additional_libs) $(LIBS) $(LDFLAGS)'
+          assert old3 in s
+          s=s.replace(old3,new3,1)
+          open(p,"w").write(s)
+          PY
+          grep -n 'RARCH_OBJ :=' ../Makefile.emulatorjs
+          grep -n '\$(TARGET):' ../Makefile.emulatorjs | tail -1
+          grep -n '\$(Q)\$(LD)' ../Makefile.emulatorjs | tail -1
           emmake ./build-emulatorjs.sh --legacy
 
       - name: Verify EmulatorJS core package
